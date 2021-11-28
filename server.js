@@ -2,7 +2,6 @@ const http = require('http');
 const Koa = require('koa');
 const Router = require('koa-router');
 const koaBody = require('koa-body');
-const uuid = require('uuid');
 const app = new Koa();
 const WS = require('ws');
 
@@ -45,27 +44,50 @@ app.use(koaBody({
   json: true,
 }));
 
-const users = [];
 const messages = [];
+const files = [];
 const router = new Router();
-
-router.post('/login', async (ctx, next) => {
-  if (users.find(item => item.name === ctx.request.body.name)) {
-    ctx.response.status = 409;
-  } else {
-    users.push({...ctx.request.body, id: uuid.v4()});
-    ctx.response.status = 204;
-  }
-});
 
 router.post('/newmessage', async (ctx, next) => {
   messages.push(ctx.request.body);
   ctx.response.status = 200;
 });
 
-router.delete('/delete/:name', async (ctx, next) => {
-  users.splice(users.indexOf(ctx.params.name));
-  ctx.response.status = 200
+router.post('/favorite', async (ctx, next) => {
+  const {id, isFavorite} = ctx.request.body;
+  for (const item of messages) {
+    if (item.id == id) {
+      item.favorite = isFavorite;
+    }
+  }
+  ctx.response.status = 200;
+});
+
+router.post('/search', async (ctx, next) => {
+  const str = ctx.request.body.str;
+  const searchArr = [];
+  for (const item of messages) {
+    if (item.message.includes(str)) {
+      searchArr.push(item);
+    }
+  }
+  ctx.response.body = JSON.stringify(searchArr);
+  ctx.response.status = 200;
+});
+
+router.put('/download', async (ctx, next) => {
+  files.push(ctx.request.body);
+  ctx.response.body = JSON.stringify(files);
+  /*
+  const id = ctx.request.body.id;
+  let result;
+  for (const item of messages) {
+    if (item.id == id) {
+      result = item.attach;
+    }
+  }
+  */
+  ctx.response.status = 200;
 });
 
 app.use(router.routes()).use(router.allowedMethods());
@@ -78,15 +100,8 @@ wsServer.on('connection', (ws, req) => {
   ws.on('message', msg => {
     [...wsServer.clients]
     .filter(o => o.readyState === WS.OPEN)
-    .forEach(o => o.send(JSON.stringify([users, messages])));
+    .forEach(o => o.send(JSON.stringify(messages)));
   });
-  ws.on('close', (msg) => {
-    users.pop();
-    [...wsServer.clients]
-    .filter(o => o.readyState === WS.OPEN)
-    .forEach(o => o.send(JSON.stringify([users, messages])));
-  });
-  ws.send('connected');
 });
 
 server.listen(port);
